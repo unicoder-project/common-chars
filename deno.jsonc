@@ -1,0 +1,41 @@
+{
+	"lock": false,
+	"tasks": {
+		"start": "deno run -A runner.ts"
+	},
+	"fmt": {
+		"semiColons": false,
+		"useTabs": true,
+		"lineWidth": 120,
+		"indentWidth": 4,
+		"singleQuote": true,
+		"proseWrap": "preserve",
+		"exclude": ["data"]
+	},
+	"compilerOptions": {
+		"strict": true,
+		"useUnknownInCatchVariables": true,
+		"lib": [
+			"deno.window",
+			"deno.unstable",
+			"dom",
+			"dom.iterable"
+		]
+	},
+	"lint": {
+		"exclude": [],
+		"rules": {
+			"tags": ["recommended"],
+			"exclude": ["no-window", "no-window-prefix"],
+			"include": ["no-console"]
+		}
+	},
+	"exclude": [],
+	"imports": {
+		"@std/fmt": "jsr:@std/fmt@^1.0.10",
+		"@std/html": "jsr:@std/html@^1.0.7",
+		"@std/io": "jsr:@std/io@^0.225.3",
+		"wtf_wikipedia": "npm:wtf_wikipedia@^10.4.2",
+		"zod": "npm:zod@^4.6.5"
+	}
+}
