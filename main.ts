@@ -2,11 +2,7 @@ import { iterateReader, type Reader } from '@std/io'
 import { unescape } from '@std/html'
 import wtf from 'wtf_wikipedia'
 import * as z from 'zod'
-
-const EXIT_CODE = {
-	Ok: 0x0,
-	Continue: 0xC0,
-} as const
+import { EXIT_CODE } from './consts.ts'
 
 const Output = z.object({
 	bytesRead: z.number(),
@@ -89,12 +85,55 @@ async function* getTextChunks(reader: Reader): AsyncGenerator<{ text: string; in
 	yield result(td.decode())
 }
 
+const KEY = 'run'
+console.time(KEY)
+
+/** A random UUID, inert content that will pass through wtf_wikipedia unscathed */
+const REPLACEMENT = '10972f22-ed26-4021-b7b0-9b2ecbc2d8e2'
+
 for await (const { text, index } of getTextChunks(fileHandle)) {
 	progress.append(text)
 
 	const m = /<text[^>]*>([\s\S]*?)<\/text>/i.exec(progress.buf)
 	if (m != null) {
-		const inner = wtf(unescape(m[1])).text().trim()
+		const wikitext = unescape(m[1])
+		let inner: string | null = null
+
+		const attempts: ((x: string) => string)[] = [
+			(x) => wtf(x).text().trim(),
+			(x) => {
+				// workaround for https://github.com/spencermountain/wtf_wikipedia/issues/601
+				// when invalid wikitext inside the <nowiki> tags causes wtf_wikipedia to throw
+				const nowikis: string[] = []
+				const re = /<nowiki[^>]*>([\s\S]*?)<\/nowiki>/gi
+
+				const sansNowikis = x.replaceAll(re, (_, content) => {
+					nowikis.push(content)
+					return REPLACEMENT
+				})
+
+				const result = wtf(sansNowikis).text().trim()
+					.replaceAll(REPLACEMENT, () => nowikis.shift() ?? '')
+
+				return result
+			},
+		]
+
+		for (const attempt of attempts) {
+			try {
+				inner = attempt(wikitext)
+				break
+			} catch (e) {
+				// deno-lint-ignore no-console
+				console.error(`Attempt failed: ${e}`)
+			}
+		}
+
+		if (inner == null) {
+			throw new Error(
+				`Failed to parse. Bytes read: ${progress.bytesRead}. Wikitext: ${JSON.stringify(wikitext)}`,
+			)
+		}
 
 		for (const char of inner) {
 			frequencies.set(char, (frequencies.get(char) ?? 0) + 1)
@@ -118,10 +157,14 @@ for await (const { text, index } of getTextChunks(fileHandle)) {
 		await write()
 		// deno-lint-ignore no-console
 		console.info('')
+		console.timeEnd(KEY)
+
 		Deno.exit(EXIT_CODE.Continue)
 	}
 }
 
+await write()
+console.timeEnd(KEY)
 Deno.exit(EXIT_CODE.Ok)
 
 async function write() {
